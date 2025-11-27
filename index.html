@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IdleMailbox - Neon</title>
+    <style>
+        :root {
+            --neon-cyan: #00f3ff;
+            --neon-blue: #0066ff;
+            --neon-red: #ff3366;
+            --bg-dark: #050a10;
+            --card-bg: #0f1623;
+            --text-main: #ffffff;
+            --text-dim: #8ba2c5;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            padding: 30px; /* <--- CAMBIO 1: Reducir padding a 30px */
+            border-radius: 12px;
+            border: 1px solid var(--neon-blue);
+            box-shadow: 0 0 20px rgba(0, 102, 255, 0.2);
+            text-align: center;
+            max-width: 800px; /* <--- CAMBIO 2: Aumentar ancho a 800px */
+            width: 100%;
+            margin-top: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+        }
+
+        h1 {
+            margin: 0; font-size: 2.5rem; text-transform: uppercase;
+            letter-spacing: 3px; text-shadow: 0 0 10px var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        .subtitle { color: var(--text-dim); margin-bottom: 20px; font-size: 0.9rem; }
+
+        /* --- INPUTS --- */
+        .input-group {
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 25px; gap: 10px;
+        }
+
+        input {
+            padding: 15px; font-size: 18px; width: 50%;
+            background: rgba(0,0,0,0.3); border: 1px solid #334;
+            color: var(--neon-cyan); border-radius: 5px; outline: none;
+            font-family: inherit; transition: 0.3s;
+        }
+        input:focus { border-color: var(--neon-cyan); box-shadow: 0 0 15px rgba(0, 243, 255, 0.3); }
+        .domain { color: var(--text-dim); font-weight: bold; }
+
+        /* --- BOTONES --- */
+        .btn-container { display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; }
+
+        button {
+            padding: 12px 30px; font-size: 16px; cursor: pointer;
+            border: 1px solid var(--neon-cyan); background: transparent;
+            color: var(--neon-cyan); border-radius: 4px; text-transform: uppercase;
+            font-weight: bold; letter-spacing: 1px; transition: 0.3s;
+            font-family: inherit;
+        }
+        button:hover { background: var(--neon-cyan); color: #000; box-shadow: 0 0 20px var(--neon-cyan); }
+        
+        .btn-random { border-color: var(--neon-blue); color: var(--neon-blue); }
+        .btn-random:hover { background: var(--neon-blue); color: #fff; box-shadow: 0 0 20px var(--neon-blue); }
+
+        /* --- HISTORIAL DE CUENTAS --- */
+        #historySection { display: none; margin-bottom: 30px; border-top: 1px solid #334; padding-top: 15px; }
+        .history-title { font-size: 0.8em; color: var(--text-dim); margin-bottom: 10px; text-align: left; }
+        .history-list { display: flex; flex-wrap: wrap; gap: 10px; }
+        
+        .history-chip {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid #445;
+            padding: 5px 10px; border-radius: 20px; font-size: 0.85em;
+            display: flex; align-items: center; gap: 8px; cursor: pointer; transition: 0.2s;
+        }
+        .history-chip:hover { border-color: var(--neon-cyan); background: rgba(0, 243, 255, 0.1); }
+        .history-chip.active { border-color: var(--neon-cyan); box-shadow: 0 0 5px var(--neon-cyan); }
+        
+        .del-history {
+            color: var(--neon-red); font-weight: bold; cursor: pointer; 
+            padding: 2px 6px; border-radius: 50%; display: inline-block;
+        }
+        .del-history:hover { background: rgba(255, 51, 102, 0.2); }
+
+        /* --- BANDEJA --- */
+        #inbox { display: none; text-align: left; animation: slideUp 0.5s ease; }
+        .inbox-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334; padding-bottom: 10px; margin-bottom: 15px; }
+        .clickable-email { color: white; cursor: pointer; border-bottom: 1px dashed var(--neon-cyan); transition: 0.3s; }
+        .clickable-email:hover { color: var(--neon-cyan); text-shadow: 0 0 15px var(--neon-cyan); border-bottom-style: solid; }
+        
+        .timer-bar { height: 2px; background: var(--neon-cyan); width: 0%; transition: width 1s linear; box-shadow: 0 0 5px var(--neon-cyan); }
+
+        .email-item {
+            background: rgba(255,255,255,0.03); border-left: 3px solid transparent;
+            padding: 15px; margin-bottom: 10px; cursor: pointer; transition: 0.2s;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .email-item:hover { background: rgba(0, 243, 255, 0.05); border-left: 3px solid var(--neon-cyan); padding-left: 20px; }
+        .sender { color: var(--neon-cyan); font-weight: bold; }
+        .subject { color: #ddd; font-size: 0.9em; margin-top: 4px; }
+        .time { color: var(--text-dim); font-size: 0.8em; }
+
+        /* --- MODAL --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); backdrop-filter: blur(8px);
+            z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-box {
+            background: var(--bg-dark); border: 1px solid var(--neon-cyan);
+            box-shadow: 0 0 50px rgba(0, 243, 255, 0.15); width: 90%; max-width: 800px; height: 80vh;
+            display: flex; flex-direction: column;
+        }
+        .modal-header { padding: 15px; border-bottom: 1px solid #334; display: flex; justify-content: space-between; align-items: center; background: rgba(0, 243, 255, 0.05); }
+        .close-btn { border: none; font-size: 24px; color: var(--neon-cyan); cursor: pointer; background: none;}
+        iframe { width: 100%; height: 100%; border: none; background: white; }
+        .active-modal { display: flex !important; }
+
+        #toast {
+            visibility: hidden; min-width: 250px; background-color: var(--neon-cyan); color: #000;
+            text-align: center; border-radius: 4px; padding: 10px; position: fixed; z-index: 1001;
+            left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: bold; box-shadow: 0 0 20px var(--neon-cyan);
+        }
+        #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2s; }
+
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>IdleMailbox</h1>
+    <p class="subtitle">SYSTEM STATUS: ONLINE | HISTORY ENABLED</p>
+
+    <div style="margin: 20px auto; display: flex; justify-content: center;">
+        <div style="width: 728px; height: 90px; overflow: hidden; background: transparent;">
+            <script type="text/javascript">
+                atOptions = {
+                    'key' : '8cef6c32d1b8bdf599f80b438b2d3925',
+                    'format' : 'iframe',
+                    'height' : 90,
+                    'width' : 728,
+                    'params' : {}
+                };
+            </script>
+            <script type="text/javascript" src="//www.highperformanceformat.com/8cef6c32d1b8bdf599f80b438b2d3925/invoke.js"></script>
+        </div>
+    </div>
+    ```
+
+    <div class="input-group">
+        <input type="text" id="username" placeholder="user_id" maxlength="20">
+        <span class="domain">@idlemailbox.com</span>
+    </div>
+
+    <div class="btn-container">
+        <button onclick="handleCreateClick()">[ ACTIVAR ]</button>
+        <button class="btn-random" onclick="generarAleatorio()">[ ALEATORIO ]</button>
+    </div>
+
+    <div id="historySection">
+        <div class="history-title">>> SESIONES RECIENTES</div>
+        <div id="historyList" class="history-list"></div>
+    </div>
+
+    <div id="message" style="color:#ff3366; margin-top:10px;"></div>
+
+    <div id="inbox">
+        <div class="inbox-header">
+            <span style="color:var(--neon-cyan)">
+                >> BANDEJA: 
+                <span id="currentEmail" class="clickable-email" onclick="copiarCorreo()" title="Clic para copiar"></span>
+            </span>
+            <span id="statusIcon">🟢 LIVE</span>
+        </div>
+        
+        <div style="background: #111; height: 2px; width: 100%; margin-bottom: 15px;">
+            <div id="timerBar" class="timer-bar"></div>
+        </div>
+
+        <div id="emailList"></div>
+    </div>
+</div>
+
+<div style="margin-top: 40px; padding-top: 20px; border-top: 1px dashed #334; display: flex; justify-content: center;">
+        <div style="width: 728px; height: 90px; overflow: hidden; background: rgba(0,0,0,0.1);">
+            <script type="text/javascript">
+                atOptions = {
+                    'key' : '8cef6c32d1b8bdf599f80b438b2d3925',
+                    'format' : 'iframe',
+                    'height' : 90,
+                    'width' : 728,
+                    'params' : {}
+                };
+            </script>
+            <script type="text/javascript" src="//www.highperformanceformat.com/8cef6c32d1b8bdf599f80b438b2d3925/invoke.js"></script>
+        </div>
+    </div>
+    </div> ```
+
+<div id="toast">>> COPIADO AL PORTAPAPELES <<</div>
+
+<div id="emailModal" class="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div>
+                <div id="mSubject" style="color: var(--neon-cyan); font-weight:bold;">Subject</div>
+                <div id="mFrom" style="color: var(--text-dim); font-size: 0.8em;">From</div>
+            </div>
+            <button class="close-btn" onclick="closeModal(true)">X</button>
+        </div>
+        <iframe id="emailFrame" sandbox="allow-same-origin"></iframe>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // ⚠️ PEGA AQUÍ TU URL DEL WORKER
+    const WORKER_URL = 'https://email-handler.elhousemx.workers.dev/'; 
+    // ==========================================
+    
+    const DOMAIN = '@idlemailbox.com';
+    let activeUser = "";
+    let cachedEmails = [];
+    let refreshTimer = null;
+    let progressBar = null;
+
+    // --- AL CARGAR LA PÁGINA ---
+    window.onload = function() {
+        renderHistory();
+        // Verificar si había un usuario activo antes de recargar
+        const lastUser = localStorage.getItem('idle_last_user');
+        if(lastUser) {
+            document.getElementById('username').value = lastUser;
+            activarCorreo(lastUser);
+        }
+    };
+
+    function generarAleatorio() {
+        const chars = '0123456789abcdef';
+        let result = '';
+        for (let i = 0; i < 8; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+        document.getElementById('username').value = result;
+    }
+
+    function handleCreateClick() {
+        const user = document.getElementById('username').value.toLowerCase().trim();
+        if(user.length < 5) return showMsg("ERROR: NOMBRE MUY CORTO");
+        activarCorreo(user);
+    }
+
+    function activarCorreo(user) {
+        activeUser = user;
+        document.getElementById('message').innerText = "";
+        document.getElementById('inbox').style.display = 'block';
+        document.getElementById('currentEmail').innerText = activeUser + DOMAIN;
+        
+        // Guardar persistencia y en historial
+        localStorage.setItem('idle_last_user', activeUser);
+        addToHistory(activeUser);
+
+        fetchEmails();
+        startAutoRefresh();
+    }
+
+    // --- LÓGICA DE HISTORIAL ---
+    function addToHistory(user) {
+        let history = JSON.parse(localStorage.getItem('idle_history') || "[]");
+        
+        // Eliminar si ya existe para moverlo al principio
+        history = history.filter(u => u !== user);
+        
+        // Agregar al inicio
+        history.unshift(user);
+        
+        // Limitar a 5
+        if(history.length > 5) history = history.slice(0, 5);
+        
+        localStorage.setItem('idle_history', JSON.stringify(history));
+        renderHistory();
+    }
+
+    function removeFromHistory(e, user) {
+        e.stopPropagation(); // Evitar que clickee el botón de activar
+        let history = JSON.parse(localStorage.getItem('idle_history') || "[]");
+        history = history.filter(u => u !== user);
+        localStorage.setItem('idle_history', JSON.stringify(history));
+        renderHistory();
+    }
+
+    function renderHistory() {
+        const history = JSON.parse(localStorage.getItem('idle_history') || "[]");
+        const container = document.getElementById('historySection');
+        const list = document.getElementById('historyList');
+        
+        if(history.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        list.innerHTML = history.map(user => `
+            <div class="history-chip ${user === activeUser ? 'active' : ''}" onclick="activarCorreo('${user}'); document.getElementById('username').value='${user}'">
+                <span>${user}</span>
+                <span class="del-history" onclick="removeFromHistory(event, '${user}')">&times;</span>
+            </div>
+        `).join('');
+    }
+
+    // --- FUNCIONES RESTANTES (COPIA, FETCH, RENDER) ---
+
+    function copiarCorreo() {
+        const emailText = document.getElementById('currentEmail').innerText;
+        navigator.clipboard.writeText(emailText).then(() => {
+            const toast = document.getElementById("toast");
+            toast.className = "show";
+            setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 2500);
+        });
+    }
+
+    function startAutoRefresh() {
+        if(refreshTimer) clearInterval(refreshTimer);
+        if(progressBar) clearInterval(progressBar);
+
+        let width = 0;
+        const bar = document.getElementById('timerBar');
+        
+        refreshTimer = setInterval(() => { fetchEmails(); width = 0; }, 10000);
+        progressBar = setInterval(() => {
+            width += 1;
+            if(width > 100) width = 100;
+            bar.style.width = width + '%';
+        }, 100);
+    }
+
+    async function fetchEmails() {
+        if (!activeUser) return;
+        try {
+            const res = await fetch(`${WORKER_URL}?user=${activeUser}`);
+            const newEmails = await res.json();
+            
+            if (JSON.stringify(newEmails) !== JSON.stringify(cachedEmails)) {
+                cachedEmails = newEmails;
+                renderEmails(cachedEmails);
+            }
+        } catch (e) { console.error("Connection lost", e); }
+    }
+
+    function renderEmails(emails) {
+        const list = document.getElementById('emailList');
+        if (!emails.length) { 
+            list.innerHTML = '<div style="padding:20px; color:#555; text-align:center;">[ ESPERANDO DATOS... ]</div>'; 
+            return; 
+        }
+        
+        list.innerHTML = emails.reverse().map((email, i) => `
+            <div class="email-item" onclick="openModal(${i})">
+                <div>
+                    <div class="sender">${email.from.replace(/</g,"&lt;")}</div>
+                    <div class="subject">${email.subject}</div>
+                </div>
+                <div class="time">${new Date(email.receivedAt).toLocaleTimeString()}</div>
+            </div>
+        `).join('');
+    }
+
+    function openModal(index) {
+        const email = cachedEmails[index];
+        document.getElementById('mSubject').innerText = email.subject;
+        document.getElementById('mFrom').innerText = email.from;
+
+        const frame = document.getElementById('emailFrame');
+        const doc = frame.contentWindow.document;
+        
+        doc.open();
+        doc.write(`
+            <style>
+                body { font-family: sans-serif; padding: 20px; color: #000; } 
+                ::-webkit-scrollbar { width: 8px; }
+                ::-webkit-scrollbar-track { background: #f1f1f1; }
+                ::-webkit-scrollbar-thumb { background: #00f3ff; border-radius: 4px; }
+            </style>
+            ${email.body}
+        `);
+        doc.close();
+        document.getElementById('emailModal').classList.add('active-modal');
+    }
+
+    function closeModal(force) {
+        if (force || event.target.id === 'emailModal') {
+            document.getElementById('emailModal').classList.remove('active-modal');
+        }
+    }
+    
+    function showMsg(txt) { document.getElementById('message').innerText = txt; }
+</script>
+
+</body>
+</html>

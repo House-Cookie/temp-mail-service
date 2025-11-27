@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IdleMailbox - ADMIN PANEL</title>
+    <style>
+        :root {
+            --neon-color: #ff3333; /* ROJO ADMIN */
+            --bg-dark: #050000;
+            --card-bg: #1a0505;
+            --text-main: #ffffff;
+        }
+
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; margin: 0; padding: 20px;
+            overflow: hidden; /* Bloqueado hasta login */
+        }
+
+        .container {
+            background: var(--card-bg); padding: 30px; border-radius: 12px;
+            border: 1px solid var(--neon-color);
+            box-shadow: 0 0 20px rgba(255, 51, 51, 0.2);
+            text-align: center; max-width: 800px; width: 100%;
+            margin-top: 30px; position: relative; filter: blur(5px); pointer-events: none; transition: 0.5s;
+        }
+
+        h1 { margin: 0; font-size: 2.5rem; letter-spacing: 3px; color: var(--neon-color); text-shadow: 0 0 10px var(--neon-color); }
+        .input-group { display: flex; align-items: center; justify-content: center; margin-bottom: 25px; gap: 10px; }
+        input { padding: 15px; font-size: 18px; width: 50%; background: rgba(0,0,0,0.3); border: 1px solid #522; color: var(--neon-color); border-radius: 5px; outline: none; }
+        button { padding: 12px 30px; font-size: 16px; cursor: pointer; border: 1px solid var(--neon-color); background: transparent; color: var(--neon-color); border-radius: 4px; font-weight: bold; transition: 0.3s; }
+        button:hover { background: var(--neon-color); color: #000; box-shadow: 0 0 20px var(--neon-color); }
+
+        /* --- LOGIN OVERLAY --- */
+        #loginOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 9999; display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+        }
+        .login-box {
+            border: 2px solid var(--neon-color); padding: 40px; border-radius: 10px;
+            text-align: center; box-shadow: 0 0 50px var(--neon-color);
+            background: #110000;
+        }
+        .login-input { width: 200px; margin-bottom: 20px; text-align: center; font-family: monospace; }
+        
+        /* RESTO DE ESTILOS (BANDEJA, MODAL) IGUAL QUE EL ORIGINAL */
+        #inbox { display: none; text-align: left; margin-top: 20px;}
+        .email-item { background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 10px; cursor: pointer; border: 1px solid #331111; display:flex; justify-content:space-between;}
+        .email-item:hover { border-color: var(--neon-color); }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-box { background: #111; border: 1px solid var(--neon-color); width: 90%; max-width: 800px; height: 80vh; display: flex; flex-direction: column; }
+        .modal-header { padding: 10px; background: #220505; display:flex; justify-content:space-between;}
+        iframe { flex: 1; border: none; background: white; }
+        .active-modal { display: flex !important; }
+    </style>
+</head>
+<body>
+
+<div id="loginOverlay">
+    <div class="login-box">
+        <h2 style="color:var(--neon-color)">⚠️ ADMIN ACCESS ⚠️</h2>
+        <input type="password" id="adminPass" class="login-input" placeholder="PASSWORD" onkeypress="if(event.key==='Enter') doLogin()">
+        <br>
+        <button onclick="doLogin()">UNLOCK SYSTEM</button>
+        <div id="loginMsg" style="color:red; margin-top:10px;"></div>
+    </div>
+</div>
+
+<div class="container" id="mainInterface">
+    <h1>ADMIN PANEL</h1>
+    <p style="color:#884444">GOD MODE: ENABLED | NO LIMITS</p>
+    
+    <div class="input-group">
+        <input type="text" id="username" placeholder="custom_name" >
+        <span style="color:#666; font-weight:bold;">@idlemailbox.com</span>
+    </div>
+
+    <button onclick="crearCorreo()">[ FORCE CREATE ]</button>
+
+    <div id="message" style="color:red; margin-top:10px;"></div>
+
+    <div id="inbox">
+        <h3 style="color:var(--neon-color)">>> BANDEJA DE: <span id="currentEmail" style="color:white"></span></h3>
+        <button onclick="fetchEmails()" style="margin-bottom:10px; font-size:12px;">REFRESH NOW</button>
+        <div id="emailList"></div>
+    </div>
+</div>
+
+<div id="emailModal" class="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <span id="mSubject" style="color:white">Subject</span>
+            <button onclick="closeModal(true)" style="border:none; color:red;">X</button>
+        </div>
+        <iframe id="emailFrame"></iframe>
+    </div>
+</div>
+
+<script>
+    // ⚠️ PEGA AQUÍ TU URL DEL WORKER
+    const WORKER_URL = 'https://email-handler.elhousemx.workers.dev'; 
+
+    const DOMAIN = '@idlemailbox.com';
+    let activeUser = "";
+    
+    // --- LÓGICA DE LOGIN ---
+    async function doLogin() {
+        const pass = document.getElementById('adminPass').value;
+        const btn = document.querySelector('#loginOverlay button');
+        const msg = document.getElementById('loginMsg');
+        
+        btn.innerText = "CHECKING...";
+        
+        try {
+            // Enviamos la contraseña al Worker
+            const res = await fetch(`${WORKER_URL}/auth`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: pass })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // Login Correcto
+                document.getElementById('loginOverlay').style.display = 'none';
+                const container = document.getElementById('mainInterface');
+                container.style.filter = 'none';
+                container.style.pointerEvents = 'all';
+                document.body.style.overflow = 'auto';
+            } else {
+                msg.innerText = "ACCESS DENIED";
+                btn.innerText = "UNLOCK SYSTEM";
+            }
+        } catch (e) {
+            msg.innerText = "SERVER ERROR";
+            btn.innerText = "UNLOCK SYSTEM";
+        }
+    }
+
+    // --- LÓGICA GOD MODE (SIN LÍMITES) ---
+    function crearCorreo() {
+        const user = document.getElementById('username').value.toLowerCase().trim();
+        
+        // ¡AQUÍ ESTÁ LA MAGIA!
+        // Hemos quitado la validación de 3 caracteres y la lista negra.
+        // Si quieres poner 'a', 'admin', 'root', o una frase de 100 letras, te dejará.
+        if(user.length < 1) return alert("Escribe algo al menos...");
+
+        activeUser = user;
+        document.getElementById('inbox').style.display = 'block';
+        document.getElementById('currentEmail').innerText = activeUser + DOMAIN;
+        fetchEmails();
+    }
+
+    async function fetchEmails() {
+        if (!activeUser) return;
+        try {
+            const res = await fetch(`${WORKER_URL}?user=${activeUser}`);
+            const emails = await res.json();
+            renderEmails(emails);
+        } catch (e) { console.error(e); }
+    }
+
+    function renderEmails(emails) {
+        const list = document.getElementById('emailList');
+        if (!emails.length) { list.innerHTML = '<p>No data found.</p>'; return; }
+        
+        list.innerHTML = emails.reverse().map((email, i) => `
+            <div class="email-item" onclick="openModal(${i})">
+                <span style="color:var(--neon-color)">${email.from.substring(0,20)}...</span>
+                <span style="color:#ccc">${email.subject}</span>
+            </div>
+        `).join('');
+        // Guardamos en variable global para el modal (truco rápido)
+        window.cachedEmails = emails;
+    }
+
+    function openModal(index) {
+        const email = window.cachedEmails[index]; // Usamos reverse() arriba, cuidado con indices
+        // Nota: para simplicidad visual en admin, asumimos orden directo del render
+        
+        document.getElementById('mSubject').innerText = email.subject;
+        const doc = document.getElementById('emailFrame').contentWindow.document;
+        doc.open(); doc.write(email.body); doc.close();
+        document.getElementById('emailModal').classList.add('active-modal');
+    }
+
+    function closeModal(force) {
+        if (force || event.target.id === 'emailModal') {
+            document.getElementById('emailModal').classList.remove('active-modal');
+        }
+    }
+</script>
+
+</body>
+</html>
